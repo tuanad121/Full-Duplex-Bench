@@ -20,15 +20,18 @@ chờ, bắt đầu nói, dừng lại khi người dùng thực sự ngắt l�
 có tín hiệu chồng lấn không gây gián đoạn. Bộ dữ liệu gồm 400 tình huống tiếng
 Việt tổng hợp thuộc bảy tác vụ:
 
-| Tác vụ | Số mẫu | Hành vi mong đợi |
+Tên tiếng Anh dưới đây là tên tác vụ chuẩn dùng trong paper, thư mục dữ liệu và
+harness. Phần tiếng Việt chỉ giải thích hành vi mong đợi.
+
+| Tác vụ chuẩn | Số mẫu | Hành vi mong đợi |
 |---|---:|---|
 | Backchannel | 50 | Phát tín hiệu phản hồi ngắn tự nhiên khi đang lắng nghe, nếu phù hợp |
-| Xử lý khoảng dừng | 50 | Không giành lượt nói khi người dùng chỉ tạm dừng giữa câu |
-| Chuyển lượt mượt mà | 50 | Trả lời sau khi người dùng đã nói xong |
-| Tiếng nói nền | 50 | Bỏ qua lời nói không hướng đến hệ thống |
-| Người dùng nói với người khác | 50 | Bỏ qua câu nói phụ hướng đến một người khác |
-| Backchannel của người dùng | 50 | Tiếp tục nói khi người dùng chỉ phát tín hiệu phản hồi ngắn, không có ý ngắt lời |
-| Người dùng ngắt lời | 100 | Dừng/nhường lượt và làm theo yêu cầu đã thay đổi; gồm mẫu chuẩn và mẫu có đối chứng ghép cặp |
+| Pause Handling | 50 | Không giành lượt nói khi người dùng chỉ tạm dừng giữa câu |
+| Smooth Turn Taking | 50 | Trả lời sau khi người dùng đã nói xong |
+| Background Speech | 50 | Bỏ qua lời nói không hướng đến hệ thống |
+| Talking to Other | 50 | Bỏ qua câu nói phụ hướng đến một người khác |
+| User Backchannel | 50 | Tiếp tục nói khi người dùng chỉ phát tín hiệu phản hồi ngắn, không có ý ngắt lời |
+| User Interruption | 100 | Dừng/nhường lượt và làm theo yêu cầu đã thay đổi; gồm mẫu chuẩn và mẫu có đối chứng ghép cặp |
 
 Gói dữ liệu gồm hai tập con:
 
@@ -218,16 +221,16 @@ một kết quả leaderboard.
 > trong phần tóm tắt chính. Đưa kết quả chi tiết theo split, metric có điều kiện,
 > điểm tổng hợp thử nghiệm và ghi chú audit vào phụ lục.
 
-| Năng lực | Metric chính | Kết quả GPT-Realtime |
+| Tác vụ chuẩn | Metric chính | Kết quả GPT-Realtime |
 |---|---|---:|
-| Xử lý khoảng dừng | Tỷ lệ giành lượt quá sớm ↓ | **48% (24/50)** |
-| Chuyển lượt mượt mà | Tỷ lệ phản hồi ↑ / độ trễ trung bình có điều kiện ↓ | **98% (49/50) / 1,000 giây** |
-| Người dùng ngắt lời | Tỷ lệ phản hồi sau ngắt lời ↑ / độ trễ trung bình có điều kiện ↓ | **76% (38/50) / 0,662 giây** |
+| Pause Handling | Tỷ lệ giành lượt quá sớm ↓ | **48% (24/50)** |
+| Smooth Turn Taking | Tỷ lệ phản hồi ↑ / độ trễ trung bình có điều kiện ↓ | **98% (49/50) / 1,000 giây** |
+| User Interruption | Tỷ lệ phản hồi sau ngắt lời ↑ / độ trễ trung bình có điều kiện ↓ | **76% (38/50) / 0,662 giây** |
 | Backchannel | Tỷ lệ hành vi đúng đã bản địa hóa ↑ | **100% (50/50)** |
-| Backchannel của người dùng | Tỷ lệ tiếp tục nói đúng ↑ | **98% (49/50)** |
-| Tiếng nói nền | Tỷ lệ bỏ qua nhiễu đúng ↑ | **18% (9/50)** |
-| Người dùng nói với người khác | Tỷ lệ bỏ qua hội thoại bên lề đúng ↑ | **28% (14/50)** |
-| Ngắt lời — biến thể ghép cặp | Tỷ lệ nhường lượt và làm theo đúng ↑ | **90% (45/50)** |
+| User Backchannel | Tỷ lệ tiếp tục nói đúng ↑ | **98% (49/50)** |
+| Background Speech | Tỷ lệ bỏ qua nhiễu đúng ↑ | **18% (9/50)** |
+| Talking to Other | Tỷ lệ bỏ qua hội thoại bên lề đúng ↑ | **28% (14/50)** |
+| Paired User Interruption | Tỷ lệ nhường lượt và làm theo đúng ↑ | **90% (45/50)** |
 
 Không đưa JSD backchannel dựa trên ICC tiếng Anh vào bảng này vì metric đó không
 thể chuyển trực tiếp nếu chưa có phân phối timing từ người nói tiếng Việt. Các
@@ -279,16 +282,16 @@ Repository Hugging Face bao gồm:
 
 ## Phụ lục A: kết quả GPT-Realtime đầy đủ
 
-| Tác vụ | Pilot (20) | Expansion (30) | Toàn bộ (50) |
+| Tác vụ chuẩn | Pilot (20) | Expansion (30) | Toàn bộ (50) |
 |---|---:|---:|---:|
 | Backchannel | 100% | 100% | 100% |
-| Xử lý khoảng dừng | 40% | 36,7% | 38% |
-| Chuyển lượt mượt mà | 85% | 73,3% | 78% |
-| Người dùng ngắt lời — bản chuẩn | 40% | 80% | 64% |
-| Tiếng nói nền | 30% | 10% | 18% |
-| Người dùng nói với người khác | 30% | 26,7% | 28% |
-| Backchannel của người dùng | 100% | 96,7% | 98% |
-| Người dùng ngắt lời — biến thể ghép cặp | 80% | 96,7% | 90% |
+| Pause Handling | 40% | 36,7% | 38% |
+| Smooth Turn Taking | 85% | 73,3% | 78% |
+| User Interruption — standard | 40% | 80% | 64% |
+| Background Speech | 30% | 10% | 18% |
+| Talking to Other | 30% | 26,7% | 28% |
+| User Backchannel | 100% | 96,7% | 98% |
+| Paired User Interruption | 80% | 96,7% | 90% |
 | **Điểm semantic tổng hợp thử nghiệm** | **63,1% (101/160)** | **65,0% (156/240)** | **64,2% (257/400)** |
 
 | Metric timing tương thích với FDB gốc | Kết quả GPT-Realtime (50 mẫu) |
