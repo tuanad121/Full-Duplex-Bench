@@ -5,7 +5,7 @@ import unittest
 
 from harness import load_manifest
 from transcribe import normalize_chunkformer, timestamp_seconds
-from judge import distractor_content, lost_pause_suffix, missed_interruption, premature_pause_turn
+from judge import distractor_content, missed_interruption, premature_pause_turn
 
 
 class ChunkFormerNormalizationTest(unittest.TestCase):
@@ -75,30 +75,6 @@ class JudgeTimingTest(unittest.TestCase):
                 {"type": "response.created", "time": 3.0, "response_id": "r1"},
                 {"type": "input_audio_buffer.speech_started", "time": 5.0},
                 {"type": "response.done", "time": 5.1, "response_id": "r1", "status": "cancelled"},
-            ]},
-        )
-        self.assertIsNone(evidence)
-
-    def test_lost_post_pause_words_is_failure(self):
-        evidence = lost_pause_suffix(
-            {"event_text": "[PAUSE]", "primary_text": "phòng đôi yên ... tĩnh cho tối mai được không"},
-            {"text": "mình sẽ kiểm tra phòng đôi yên cho bạn"},
-            {"events": [
-                {"type": "response.created", "time": 3.6, "response_id": "r1"},
-                {"type": "input_audio_buffer.speech_started", "time": 5.1},
-                {"type": "response.done", "time": 5.1, "response_id": "r1", "status": "cancelled"},
-            ]},
-        )
-        self.assertEqual(evidence["suffix_tokens"], ["mai", "tĩnh", "tối"])
-
-    def test_retained_post_pause_words_is_not_forced_failure(self):
-        evidence = lost_pause_suffix(
-            {"event_text": "[PAUSE]", "primary_text": "thủ tục cho ... chuyến bay đi Đà Nẵng nhé"},
-            {"text": "mình sẽ hướng dẫn thủ tục cho chuyến bay đi đà nẵng"},
-            {"events": [
-                {"type": "response.created", "time": 5.5, "response_id": "r1"},
-                {"type": "input_audio_buffer.speech_started", "time": 6.3},
-                {"type": "response.done", "time": 6.3, "response_id": "r1", "status": "cancelled"},
             ]},
         )
         self.assertIsNone(evidence)

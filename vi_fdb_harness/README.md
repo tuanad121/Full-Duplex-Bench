@@ -53,7 +53,7 @@ cd ../v1_v1.5/model_inference/gpt-realtime
 npm install
 ```
 
-## 1. Validate the canonical 160-sample dataset
+## 1. Validate a released dataset split
 
 From `vi_fdb_harness/`:
 
@@ -62,7 +62,9 @@ uv run python harness.py validate-dataset \
   --dataset-root ../external/VieNeu-TTS/outputs/fdb_vi_pilot_160_20260710
 ```
 
-Expected balance: 20 samples in each of eight tasks; 160 event inputs and 80 paired clean inputs.
+The public release contains `pilot_160` and `expansion_240`. Validate each split
+independently; together they contain 400 event cases and 120 paired clean
+controls.
 
 ## 2. Run GPT-Realtime
 
@@ -82,7 +84,7 @@ uv run python harness.py run-openai \
   --condition both --jobs 1 --limit 1
 ```
 
-Official 240-condition run:
+Run all event cases and any paired clean controls in a split:
 
 ```bash
 uv run python harness.py run-openai \
@@ -102,38 +104,46 @@ uv run python harness.py validate-run \
   --run-root ../outputs/vi_fdb_v1_0/gpt_realtime
 ```
 
-## 3. Vietnamese ASR
+## 3. Vietnamese ASR and observable speech boundaries
 
-Primary Vietnamese transcription and timestamps:
-
-```bash
-uv run python transcribe.py \
-  --root ../outputs/vi_fdb_v1_0/gpt_realtime \
-  --backend chunkformer
-```
-
-Whisper timestamp verification on a 24-file bake-off:
+Generate word-level Vietnamese transcripts with PhoWhisper:
 
 ```bash
 uv run python transcribe.py \
   --root ../outputs/vi_fdb_v1_0/gpt_realtime \
-  --backend whisper --limit 24
+  --backend phowhisper
 ```
 
-Compare ASRs and flag text similarity below 0.75 or onset disagreement above 300 ms:
+Replace only the outer speech boundaries with boundaries measured directly from
+the output audio by Silero VAD. Lexical units and inner word timestamps remain
+from PhoWhisper:
 
 ```bash
-uv run python compare_asr.py \
-  --root ../outputs/vi_fdb_v1_0/gpt_realtime \
-  --primary chunkformer --verifier whisper
+uv run python align_phowhisper_vad.py \
+  --root ../outputs/vi_fdb_v1_0/gpt_realtime
 ```
 
-Run PhoWhisper only on flagged cases or for an additional audit. Every backend writes the same normalized schema:
+ChunkFormer remains available as an ASR comparison, but its phrase-level chunks
+must not be passed to the original word-count timing rules as if they were
+word-level chunks.
+
+Export the selected ASR artifacts into the original English FDB directory
+contract without changing its metric implementations:
+
+```bash
+uv run python export_english_fdb_compat.py \
+  --source-data /path/to/normalized/vi-fdb \
+  --system-run ../outputs/vi_fdb_v1_0/gpt_realtime \
+  --output ../outputs/vi_fdb_v1_0/english_fdb_compat \
+  --asr-backend phowhisper_vad
+```
+
+Every ASR backend writes the same normalized schema:
 
 ```json
 {
   "schema_version": 1,
-  "backend": "chunkformer",
+  "backend": "phowhisper",
   "audio": "output.wav",
   "text": "...",
   "chunks": [{"text": "...", "timestamp": [4.92, 5.24]}]
@@ -148,7 +158,7 @@ The judge sees the task, source text/event interval, and timestamped clean/event
 export OPENAI_API_KEY=...
 uv run python judge.py \
   --root ../outputs/vi_fdb_v1_0/gpt_realtime \
-  --asr-backend chunkformer
+  --asr-backend phowhisper_vad
 ```
 
 Cases below 0.7 judge confidence and ASR-disagreement cases require human review.
@@ -158,7 +168,7 @@ Cases below 0.7 judge confidence and ASR-disagreement cases require human review
 ```bash
 uv run python report.py \
   --run-root ../outputs/vi_fdb_v1_0/gpt_realtime \
-  --asr-backend chunkformer
+  --asr-backend phowhisper_vad
 ```
 
 The generated `review.html` plays the event input and assistant output from the same timestamp. It does not alter scoring audio.

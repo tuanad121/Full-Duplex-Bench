@@ -128,27 +128,6 @@ def premature_pause_turn(metadata: dict, timing: dict) -> dict | None:
     return None
 
 
-def lost_pause_suffix(metadata: dict, transcript: dict, timing: dict) -> dict | None:
-    """Detect complete loss of salient words following a mid-utterance pause.
-
-    Require both an early/cancelled response attempt and zero lexical retention
-    from a multi-token suffix. This keeps the rule conservative; partial lexical
-    retention and paraphrases remain for the semantic judge.
-    """
-    diagnostic = premature_pause_turn(metadata, timing)
-    primary = str(metadata.get("primary_text") or "")
-    if not diagnostic or "..." not in primary:
-        return None
-    suffix = primary.split("...", 1)[1]
-    stop = {"cho", "vào", "được", "không", "mình", "bạn", "nào", "nhé", "ạ", "có", "là"}
-    tokens = [token for token in re.findall(r"[^\W\d_]+", suffix.casefold(), re.UNICODE) if token not in stop]
-    output_tokens = set(re.findall(r"[^\W\d_]+", str(transcript.get("text") or "").casefold(), re.UNICODE))
-    matched = sorted(set(tokens) & output_tokens)
-    if len(set(tokens)) >= 2 and not matched:
-        return {"suffix_tokens": sorted(set(tokens)), "matched_tokens": matched, **diagnostic}
-    return None
-
-
 def missed_interruption(metadata: dict, timing: dict) -> dict | None:
     """Detect a changed-request event that never causes a new response."""
     if metadata.get("task") != "user_interruption":
@@ -206,9 +185,13 @@ def judge_one(client, model: str, folder: Path, backend: str) -> dict:
     if not event_asr.exists():
         raise FileNotFoundError(event_asr)
     event_transcript = read_json(event_asr)
+    # Ellipses are authoring delimiters used to synthesize pauses. They are not
+    # observable by the evaluated system and must not influence judging.
+    reference_text = re.sub(r"(?:\.{3,}|…)", " ", str(metadata.get("primary_text") or ""))
+    reference_text = re.sub(r"\s+", " ", reference_text).strip()
     payload = {
         "event_role": EVENT_ROLES.get(metadata.get("event_type"), "unspecified_spoken_event"),
-        "primary_text": metadata.get("primary_text"),
+        "primary_text": reference_text,
         "event_text": metadata.get("event_text"),
         "event_interval": metadata.get("timestamps"),
         "realtime_timing": timing,
@@ -229,7 +212,6 @@ def judge_one(client, model: str, folder: Path, backend: str) -> dict:
     judged = json.loads(response.choices[0].message.content)
     observed = judged.get("observed_behavior")
     no_speech = not str(event_transcript.get("text") or "").strip()
-    lost_suffix = lost_pause_suffix(metadata, event_transcript, timing)
     missed_interrupt = missed_interruption(metadata, timing)
     hard_failure = None
     if no_speech:
@@ -237,15 +219,6 @@ def judge_one(client, model: str, folder: Path, backend: str) -> dict:
         observed = "NO_SPEECH"
         judged["confidence"] = 1.0
         judged["evidence_vi"] = "Không phát hiện lời nói nào của trợ lý trong đầu ra."
-    elif lost_suffix:
-        hard_failure = {"type": "lost_post_pause_content", **lost_suffix}
-        observed = "PREMATURE_TURN"
-        judged["confidence"] = 1.0
-        judged["evidence_vi"] = (
-            "Phản hồi cuối không giữ lại nội dung quan trọng sau khoảng dừng: "
-            + ", ".join(lost_suffix["suffix_tokens"])
-            + "."
-        )
     elif missed_interrupt:
         hard_failure = {"type": "missed_interruption", **missed_interrupt}
         observed = "MISSED_INTERRUPTION"

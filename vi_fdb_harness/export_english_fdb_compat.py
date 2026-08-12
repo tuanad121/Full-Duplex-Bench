@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 """Export a Vi-FDB system run in the directory layout expected by English FDB.
 
-The exporter does not alter transcripts or annotations. It links the Vietnamese
-input/annotation files and maps ``output.chunkformer.json`` to the upstream
-``output.json`` filename. This lets the original FDB timing evaluators run
-without modifying their metric logic.
+The exporter does not alter annotations or metric logic. It links the Vietnamese
+input files and maps the selected timestamped ASR artifact to the upstream
+``output.json`` filename, slicing only where the original FDB evaluator expects
+an event-relative transcript.
 """
 
 from __future__ import annotations
@@ -58,13 +58,13 @@ def write_event_output(source: Path, destination: Path, task: str, annotation: P
     destination.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
 
 
-def export(source_data: Path, system_run: Path, output: Path) -> dict:
+def export(source_data: Path, system_run: Path, output: Path, asr_backend: str) -> dict:
     manifest: dict = {
         "format": "english-fdb-evaluation-compatible",
         "source_data": str(source_data.resolve()),
         "system_run": str(system_run.resolve()),
         "mapping": {
-            "output.chunkformer.json": "event-sliced output.json",
+            f"output.{asr_backend}.json": "event-sliced output.json",
             "annotation_files": "unchanged",
         },
         "tasks": {},
@@ -80,13 +80,14 @@ def export(source_data: Path, system_run: Path, output: Path) -> dict:
             target_sample = target_task / sample_dir.name
             annotation_path = sample_dir / annotations[0]
             write_event_output(
-                run_sample / "output.chunkformer.json",
+                run_sample / f"output.{asr_backend}.json",
                 target_sample / "output.json",
                 task,
                 annotation_path,
             )
             link(run_sample / "output.wav", target_sample / "output.wav")
-            link(sample_dir / "input.wav", target_sample / "input.wav")
+            if (sample_dir / "input.wav").exists():
+                link(sample_dir / "input.wav", target_sample / "input.wav")
             link(sample_dir / "metadata.json", target_sample / "metadata.json")
             for annotation in annotations:
                 link(sample_dir / annotation, target_sample / annotation)
@@ -105,8 +106,9 @@ def main() -> None:
     parser.add_argument("--source-data", type=Path, required=True)
     parser.add_argument("--system-run", type=Path, required=True)
     parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument("--asr-backend", default="phowhisper_vad")
     args = parser.parse_args()
-    manifest = export(args.source_data, args.system_run, args.output)
+    manifest = export(args.source_data, args.system_run, args.output, args.asr_backend)
     print(json.dumps(manifest, ensure_ascii=False, indent=2))
 
 

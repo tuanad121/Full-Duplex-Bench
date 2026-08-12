@@ -85,6 +85,30 @@ def load_manifest(dataset_root: Path) -> list[dict]:
     normalized = []
     for original in rows:
         row = dict(original)
+        # Public release manifests flatten v1.0/v1.5 from their paths. Recover
+        # the local suite directory without changing the released dataset.
+        metadata_rel = row.get("metadata")
+        if metadata_rel and not (dataset_root / metadata_rel).exists():
+            release_id = str(row.get("id", ""))
+            local_id = release_id.split("_", 1)[-1]
+            local_metadata = str(Path(row["task"]) / local_id / "metadata.json")
+            candidates = [
+                prefix / local_metadata
+                for prefix in (Path("v1_0"), Path("v1_5"))
+                if (dataset_root / prefix / local_metadata).exists()
+            ]
+            variant = row.get("evaluation_variant")
+            if len(candidates) > 1 and variant in {"standard", "counterfactual"}:
+                wanted = "v1_0" if variant == "standard" else "v1_5"
+                candidates = [candidate for candidate in candidates if candidate.parts[0] == wanted]
+            if len(candidates) == 1:
+                prefix = candidates[0].parts[0]
+                base = Path(prefix) / row["task"] / local_id
+                row["input"] = str(base / "input.wav")
+                row["metadata"] = str(base / "metadata.json")
+                if row.get("clean_input"):
+                    row["clean_input"] = str(base / "clean_input.wav")
+                metadata_rel = row["metadata"]
         if not row.get("version") and row.get("metadata"):
             metadata_path = dataset_root / row["metadata"]
             if metadata_path.exists():

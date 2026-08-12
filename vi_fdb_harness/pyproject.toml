@@ -9,9 +9,11 @@ asr = [
   "accelerate>=0.26",
   "chunkformer",
   "openai-whisper",
+  "silero-vad>=6.2.1",
   "soundfile",
-  "torch==2.5.1",
-  "torchaudio==2.5.1",
+  "torch==2.6.0",
+  "torchaudio==2.6.0",
+  "torchvision==0.21.0",
   "transformers",
 ]
 judge = ["openai>=1.0"]
@@ -25,10 +27,11 @@ vi-fdb-judge = "judge:main"
 package = false
 
 [[tool.uv.index]]
-name = "pytorch-cu121"
-url = "https://download.pytorch.org/whl/cu121"
+name = "pytorch-cu124"
+url = "https://download.pytorch.org/whl/cu124"
 explicit = true
 
 [tool.uv.sources]
-torch = { index = "pytorch-cu121" }
-torchaudio = { index = "pytorch-cu121" }
+torch = { index = "pytorch-cu124" }
+torchaudio = { index = "pytorch-cu124" }
+torchvision = { index = "pytorch-cu124" }

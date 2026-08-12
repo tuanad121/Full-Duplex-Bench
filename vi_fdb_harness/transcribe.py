@@ -98,9 +98,12 @@ def main() -> None:
     parser.add_argument("--backend", choices=["chunkformer", "whisper", "phowhisper"], required=True)
     parser.add_argument("--audio-names", nargs="+", default=["output.wav", "clean_output.wav"])
     parser.add_argument("--overwrite", action="store_true")
+    parser.add_argument("--start", type=int, default=0, help="Zero-based audio-file offset for parallel/resumable runs")
     parser.add_argument("--limit", type=int)
+    parser.add_argument("--device", type=int, default=0, help="CUDA device index; ignored when CUDA is unavailable")
     args = parser.parse_args()
     audio_files = discover(args.root, args.audio_names)
+    audio_files = audio_files[args.start:]
     if args.limit:
         audio_files = audio_files[: args.limit]
     if args.backend == "chunkformer":
@@ -121,7 +124,8 @@ def main() -> None:
         pipe = pipeline(
             "automatic-speech-recognition",
             model="vinai/PhoWhisper-large",
-            device=0 if torch.cuda.is_available() else -1,
+            device=args.device if torch.cuda.is_available() else -1,
+            dtype=torch.float16 if torch.cuda.is_available() else torch.float32,
         )
         infer = lambda path: transcribe_phowhisper(pipe, path)
     for index, audio in enumerate(audio_files, 1):
