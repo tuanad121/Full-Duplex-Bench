@@ -214,29 +214,26 @@ trò hội thoại. Pilot có 29 hiệu chỉnh từ người Việt bản ngữ
 được chấm tự động và cần cùng quy trình kiểm tra thủ công trước khi công bố như
 một kết quả leaderboard.
 
-| Tác vụ | Pilot (20) | Expansion (30) | Toàn bộ (50) |
-|---|---:|---:|---:|
-| Backchannel | 100% | 100% | 100% |
-| Xử lý khoảng dừng | 40% | 36,7% | 38% |
-| Chuyển lượt mượt mà | 85% | 73,3% | 78% |
-| Người dùng ngắt lời — bản chuẩn | 40% | 80% | 64% |
-| Tiếng nói nền | 30% | 10% | 18% |
-| Người dùng nói với người khác | 30% | 26,7% | 28% |
-| Backchannel của người dùng | 100% | 96,7% | 98% |
-| Người dùng ngắt lời — biến thể ghép cặp | 80% | 96,7% | 90% |
-| **Tổng** | **63,1% (101/160)** | **65,0% (156/240)** | **64,2% (257/400)** |
+> **Bảng headline được khuyến nghị.** Báo cáo các kết quả theo từng tác vụ này
+> trong phần tóm tắt chính. Đưa kết quả chi tiết theo split, metric có điều kiện,
+> điểm tổng hợp thử nghiệm và ghi chú audit vào phụ lục.
 
-Các metric về timing/chuyển lượt, không phụ thuộc ngôn ngữ và được xuất theo cấu
-trúc tương thích với English FDB, gồm:
+| Năng lực | Metric chính | Kết quả GPT-Realtime |
+|---|---|---:|
+| Xử lý khoảng dừng | Tỷ lệ giành lượt quá sớm ↓ | **48% (24/50)** |
+| Chuyển lượt mượt mà | Tỷ lệ phản hồi ↑ / độ trễ trung bình có điều kiện ↓ | **98% (49/50) / 1,000 giây** |
+| Người dùng ngắt lời | Tỷ lệ phản hồi sau ngắt lời ↑ / độ trễ trung bình có điều kiện ↓ | **76% (38/50) / 0,662 giây** |
+| Backchannel | Tỷ lệ hành vi đúng đã bản địa hóa ↑ | **100% (50/50)** |
+| Backchannel của người dùng | Tỷ lệ tiếp tục nói đúng ↑ | **98% (49/50)** |
+| Tiếng nói nền | Tỷ lệ bỏ qua nhiễu đúng ↑ | **18% (9/50)** |
+| Người dùng nói với người khác | Tỷ lệ bỏ qua hội thoại bên lề đúng ↑ | **28% (14/50)** |
+| Ngắt lời — biến thể ghép cặp | Tỷ lệ nhường lượt và làm theo đúng ↑ | **90% (45/50)** |
 
-| Metric FDB gốc | Kết quả GPT-Realtime (50 mẫu) |
-|---|---:|
-| Tỷ lệ giành lượt trong khoảng dừng (càng thấp càng tốt) | 48% (24/50) |
-| Tỷ lệ chờ đúng trong khoảng dừng | 52% (26/50) |
-| Tỷ lệ giành lượt đúng sau khi người dùng nói xong | 98% (49/50) |
-| Độ trễ chuyển lượt mượt mà, tính trên các mẫu có phản hồi | 1,000 giây |
-| Tỷ lệ phản hồi sau khi bị ngắt lời | 76% (38/50) |
-| Độ trễ phản hồi sau khi bị ngắt lời, tính trên các mẫu có phản hồi | 0,662 giây |
+Không đưa JSD backchannel dựa trên ICC tiếng Anh vào bảng này vì metric đó không
+thể chuyển trực tiếp nếu chưa có phân phối timing từ người nói tiếng Việt. Các
+hàng hành vi đã bản địa hóa hữu ích nhưng vẫn là kết quả tạm thời cho đến khi
+expansion được người Việt bản ngữ hiệu chỉnh. Điểm semantic tổng hợp 64,2% là
+metric thử nghiệm, không phải metric headline của FDB gốc.
 
 Điểm ngữ nghĩa và các metric timing trả lời những câu hỏi khác nhau. Ví
 dụ, hệ thống có thể chờ đúng qua một khoảng dừng nhưng sau đó bỏ sót phần còn lại
@@ -279,3 +276,26 @@ Repository Hugging Face bao gồm:
 
 Để xem lý do thiết kế, các lỗi đã biết và giới hạn của bản phát hành, đọc
 `docs/vi-fdb-v1-status-and-findings.md` trong repository của harness.
+
+## Phụ lục A: kết quả GPT-Realtime đầy đủ
+
+| Tác vụ | Pilot (20) | Expansion (30) | Toàn bộ (50) |
+|---|---:|---:|---:|
+| Backchannel | 100% | 100% | 100% |
+| Xử lý khoảng dừng | 40% | 36,7% | 38% |
+| Chuyển lượt mượt mà | 85% | 73,3% | 78% |
+| Người dùng ngắt lời — bản chuẩn | 40% | 80% | 64% |
+| Tiếng nói nền | 30% | 10% | 18% |
+| Người dùng nói với người khác | 30% | 26,7% | 28% |
+| Backchannel của người dùng | 100% | 96,7% | 98% |
+| Người dùng ngắt lời — biến thể ghép cặp | 80% | 96,7% | 90% |
+| **Điểm semantic tổng hợp thử nghiệm** | **63,1% (101/160)** | **65,0% (156/240)** | **64,2% (257/400)** |
+
+| Metric timing tương thích với FDB gốc | Kết quả GPT-Realtime (50 mẫu) |
+|---|---:|
+| Tỷ lệ giành lượt trong khoảng dừng ↓ | 48% (24/50) |
+| Tỷ lệ chờ đúng trong khoảng dừng ↑ | 52% (26/50) |
+| Tỷ lệ phản hồi khi chuyển lượt mượt mà ↑ | 98% (49/50) |
+| Độ trễ chuyển lượt mượt mà, tính trên mẫu có phản hồi ↓ | 1,000 giây |
+| Tỷ lệ phản hồi sau khi bị ngắt lời ↑ | 76% (38/50) |
+| Độ trễ phản hồi sau ngắt lời, tính trên mẫu có phản hồi ↓ | 0,662 giây |

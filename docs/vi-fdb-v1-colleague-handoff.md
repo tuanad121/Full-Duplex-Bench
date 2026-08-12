@@ -210,29 +210,26 @@ judging uses the role-aware Vietnamese **GPT-4.1-mini** prompt. The pilot
 includes 29 explicit native-speaker corrections; the expansion is automated
 and should receive the same human audit before a leaderboard claim.
 
-| Task | Pilot (20) | Expansion (30) | Full (50) |
-|---|---:|---:|---:|
-| Backchannel | 100% | 100% | 100% |
-| Pause handling | 40% | 36.7% | 38% |
-| Smooth turn-taking | 85% | 73.3% | 78% |
-| User interruption — standard | 40% | 80% | 64% |
-| Background speech | 30% | 10% | 18% |
-| Talking to other | 30% | 26.7% | 28% |
-| User backchannel | 100% | 96.7% | 98% |
-| User interruption — paired variant | 80% | 96.7% | 90% |
-| **Overall** | **63.1% (101/160)** | **65.0% (156/240)** | **64.2% (257/400)** |
+> **Recommended headline table.** Report these per-task results in the main
+> benchmark summary. Keep split parity, conditional details, experimental
+> aggregates, and audit notes in an appendix.
 
-Language-independent timing/turn metrics exported to the English FDB-compatible
-layout were:
+| Capability | Primary metric | GPT-Realtime result |
+|---|---|---:|
+| Pause handling | Premature turn-over rate ↓ | **48% (24/50)** |
+| Smooth turn-taking | Response rate ↑ / conditional mean latency ↓ | **98% (49/50) / 1.000 s** |
+| User interruption | Post-interruption response rate ↑ / conditional mean latency ↓ | **76% (38/50) / 0.662 s** |
+| Backchannel | Localized behavioral success ↑ | **100% (50/50)** |
+| User backchannel | Continue-speaking success ↑ | **98% (49/50)** |
+| Background speech | Ignore-distractor success ↑ | **18% (9/50)** |
+| Talking to other | Ignore-side-conversation success ↑ | **28% (14/50)** |
+| Paired interruption variant | Yield-and-follow success ↑ | **90% (45/50)** |
 
-| Original FDB metric | GPT-Realtime result (50 cases) |
-|---|---:|
-| Pause take-over rate (lower is better) | 48% (24/50) |
-| Pause correct-wait rate | 52% (26/50) |
-| Smooth-turn take-over rate | 98% (49/50) |
-| Smooth-turn latency, conditional on response | 1.000 s |
-| Post-interruption response rate | 76% (38/50) |
-| Post-interruption latency, conditional on response | 0.662 s |
+Do not place English ICC backchannel JSD in this table: it is not transferable
+without a Vietnamese human timing distribution. The localized behavioral rows
+are useful but remain provisional until the expansion receives native-speaker
+adjudication. The 64.2% cross-task semantic average is an experimental summary,
+not an original FDB headline metric.
 
 The semantic score and timing metrics answer different questions. For
 example, a system can correctly wait through a pause but then omit the resumed
@@ -274,3 +271,26 @@ The Hugging Face repository includes:
 
 For design rationale, known failure modes, and release limitations, see
 `docs/vi-fdb-v1-status-and-findings.md` in the harness repository.
+
+## Appendix A: full GPT-Realtime result
+
+| Task | Pilot (20) | Expansion (30) | Full (50) |
+|---|---:|---:|---:|
+| Backchannel | 100% | 100% | 100% |
+| Pause handling | 40% | 36.7% | 38% |
+| Smooth turn-taking | 85% | 73.3% | 78% |
+| User interruption — standard | 40% | 80% | 64% |
+| Background speech | 30% | 10% | 18% |
+| Talking to other | 30% | 26.7% | 28% |
+| User backchannel | 100% | 96.7% | 98% |
+| User interruption — paired variant | 80% | 96.7% | 90% |
+| **Experimental overall semantic score** | **63.1% (101/160)** | **65.0% (156/240)** | **64.2% (257/400)** |
+
+| Original FDB-compatible timing metric | GPT-Realtime result (50 cases) |
+|---|---:|
+| Pause take-over rate ↓ | 48% (24/50) |
+| Pause correct-wait rate ↑ | 52% (26/50) |
+| Smooth-turn response rate ↑ | 98% (49/50) |
+| Smooth-turn latency, conditional on response ↓ | 1.000 s |
+| Post-interruption response rate ↑ | 76% (38/50) |
+| Post-interruption latency, conditional on response ↓ | 0.662 s |
