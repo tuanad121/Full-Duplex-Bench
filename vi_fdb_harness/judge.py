@@ -181,6 +181,10 @@ def judge_one(client, model: str, folder: Path, backend: str) -> dict:
     metadata = read_json(folder / "metadata.json")
     event_asr = folder / f"output.{backend}.json"
     clean_asr = folder / f"clean_output.{backend}.json"
+    if not clean_asr.exists() and backend == "phowhisper_vad":
+        # Clean controls are semantic comparators; VAD-derived event timing is
+        # not required. Preserve their unmodified PhoWhisper word alignment.
+        clean_asr = folder / "clean_output.phowhisper.json"
     timing = read_json(folder / "output_timing.json")
     if not event_asr.exists():
         raise FileNotFoundError(event_asr)

@@ -10,8 +10,8 @@ Vietnamese version: [`vi-fdb-v1-colleague-handoff-vi.md`](vi-fdb-v1-colleague-ha
 - Interactive result explorer: <https://huggingface.co/spaces/tuanamz/vi-fdb-v1-explorer>
 
 The Hugging Face dataset is public and does not require an access request or
-authentication. Its dataset-card license is currently `other`; review the card
-before redistributing or incorporating the audio into another release.
+authentication. It follows the upstream Full-Duplex-Bench CC BY-NC 4.0 license.
+Vi-FDB is independently published and is not an official VinFast dataset.
 
 ## What this benchmark measures
 
@@ -34,12 +34,11 @@ The package has two subsets:
 
 - `data/pilot_160`: fully exercised end to end with GPT-Realtime, Vietnamese
   ASR, automated judging, and native-speaker corrections.
-- `data/expansion_240`: passed structural, timestamp, audio, and trailing-silence
-  QC, but has not received the same full system evaluation and manual audit.
+- `data/expansion_240`: passed structural/audio QC and has complete GPT-Realtime,
+  PhoWhisper word-timestamp, Silero VAD, and applicable original-FDB metric artifacts.
 
-Use `pilot_160` first when reproducing our reported result. Use all 400 cases for
-new benchmark runs, but label the combined result as release-candidate work until
-the expansion audit is complete.
+Use all 400 event cases for a full submission. The 200 clean controls are paired
+comparison conditions and are not additional headline benchmark cases.
 
 ## Download
 
@@ -168,12 +167,16 @@ uv sync --group asr
 uv sync --group judge
 ```
 
-Transcribe assistant output with ChunkFormer:
+Transcribe assistant output with PhoWhisper word timestamps, then attach
+audio-observed outer speech boundaries with Silero VAD:
 
 ```bash
 uv run python transcribe.py \
   --root ../outputs/vi_fdb_v1_0/my_model \
-  --backend chunkformer
+  --backend phowhisper
+
+uv run python align_phowhisper_vad.py \
+  --root ../outputs/vi_fdb_v1_0/my_model
 ```
 
 Run the role-aware blinded judge. It receives the task definition, ASR output,
@@ -185,7 +188,7 @@ export OPENAI_API_KEY=...
 
 uv run python judge.py \
   --root ../outputs/vi_fdb_v1_0/my_model \
-  --asr-backend chunkformer
+  --asr-backend phowhisper_vad
 ```
 
 Generate the synchronized audio/transcript review page:
@@ -193,47 +196,45 @@ Generate the synchronized audio/transcript review page:
 ```bash
 uv run python report.py \
   --run-root ../outputs/vi_fdb_v1_0/my_model \
-  --asr-backend chunkformer
+  --asr-backend phowhisper_vad
 ```
 
 Review low-confidence judge decisions, ASR disagreements, no-speech cases, and a
 stratified sample from every task. Report both automated and human-corrected
 scores and retain the correction file.
 
-## Our completed benchmark result
+## Our completed GPT-Realtime reference result
 
-We evaluated **GPT-Realtime** on the 160-case pilot. Assistant output was
-transcribed with **ChunkFormer** and judged using a role-aware
-**GPT-4.1-mini** prompt. Twenty-nine explicit native-speaker corrections were
-applied; other rows retain the automated verdict. Treat this as a calibrated
-pilot result, not a final public leaderboard claim.
+We ran **GPT-Realtime** on all 400 event cases and 200 clean controls. Semantic
+judging uses the role-aware Vietnamese **GPT-4.1-mini** prompt. The pilot
+includes 29 explicit native-speaker corrections; the expansion is automated
+and should receive the same human audit before a leaderboard claim.
 
-| Pilot task | Pass | Total | Pass rate |
+| Task | Pilot (20) | Expansion (30) | Full (50) |
 |---|---:|---:|---:|
-| Backchannel | 20 | 20 | 100% |
-| Pause handling | 8 | 20 | 40% |
-| Smooth turn-taking | 17 | 20 | 85% |
-| User interruption — standard | 8 | 20 | 40% |
-| Background speech | 6 | 20 | 30% |
-| Talking to other | 6 | 20 | 30% |
-| User backchannel | 20 | 20 | 100% |
-| User interruption — paired/clean-control variant | 16 | 20 | 80% |
-| **Overall** | **101** | **160** | **63.1%** |
+| Backchannel | 100% | 100% | 100% |
+| Pause handling | 40% | 36.7% | 38% |
+| Smooth turn-taking | 85% | 73.3% | 78% |
+| User interruption — standard | 40% | 80% | 64% |
+| Background speech | 30% | 10% | 18% |
+| Talking to other | 30% | 26.7% | 28% |
+| User backchannel | 100% | 96.7% | 98% |
+| User interruption — paired variant | 80% | 96.7% | 90% |
+| **Overall** | **63.1% (101/160)** | **65.0% (156/240)** | **64.2% (257/400)** |
 
 Language-independent timing/turn metrics exported to the English FDB-compatible
 layout were:
 
-| Metric | GPT-Realtime pilot result |
+| Original FDB metric | GPT-Realtime result (50 cases) |
 |---|---:|
-| Pause take-over rate (lower is better) | 15% (3/20) |
-| Pause correct-wait rate | 85% (17/20) |
-| Smooth-turn take-over rate | 90% (18/20) |
-| Smooth-turn latency, conditional on response | 0.773 s |
-| Post-interruption response rate | 45% (9/20) |
-| Post-interruption latency, conditional on response | 1.107 s |
-| Vietnamese interruption relevance | 2.05 / 5 |
+| Pause take-over rate (lower is better) | 48% (24/50) |
+| Pause correct-wait rate | 52% (26/50) |
+| Smooth-turn take-over rate | 98% (49/50) |
+| Smooth-turn latency, conditional on response | 1.000 s |
+| Post-interruption response rate | 76% (38/50) |
+| Post-interruption latency, conditional on response | 0.662 s |
 
-The semantic 63.1% score and timing metrics answer different questions. For
+The semantic score and timing metrics answer different questions. For
 example, a system can correctly wait through a pause but then omit the resumed
 part of the Vietnamese request; timing credits the wait, while semantic judging
 correctly marks the full behavior as a failure.
@@ -257,14 +258,15 @@ Record at minimum:
 - human-review sampling policy and every correction;
 - per-task pass counts, overall pass rate, and applicable timing metrics.
 
-Do not compare a 400-case release-candidate run directly against our 160-case
-pilot score without also reporting the same `pilot_160` slice.
+When comparing submissions, report both the full score and the same named split.
+The pilot is human-corrected while the expansion currently is not.
 
 ## Reference artifacts in the dataset repository
 
 The Hugging Face repository includes:
 
 - `evaluation/upstream_metrics.json`: English FDB-compatible timing metrics.
+- `evaluation/semantic_parity.json`: pilot, expansion, and full semantic counts.
 - `evaluation/interruption_relevance_summary.json`: localized Vietnamese
   interruption-relevance results.
 - `data/pilot_160/vibe_check.html`: pilot dataset review page.

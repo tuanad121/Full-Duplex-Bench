@@ -17,13 +17,17 @@ TURN_DURATION_THRESHOLD = 1.0
 TURN_NUM_WORDS_THRESHOLD = 3
 
 
-def detected_turn(chunks: list[dict]) -> bool:
-    if not chunks:
+def speech_bounds(output: dict) -> tuple[float, float] | None:
+    intervals = output.get("evaluation_speech_intervals") or output.get("timing_provenance", {}).get("speech_intervals", [])
+    if intervals:
+        return float(intervals[0]["start"]), float(intervals[-1]["end"])
+    return None
+
+
+def detected_turn(chunks: list[dict], bounds: tuple[float, float] | None) -> bool:
+    if not chunks or not bounds:
         return False
-    start = chunks[0]["timestamp"][0]
-    end = chunks[-1]["timestamp"][-1]
-    if end is None:
-        end = chunks[-1]["timestamp"][0]
+    start, end = bounds
     duration = end - start
     return duration >= TURN_DURATION_THRESHOLD or len(chunks) > TURN_NUM_WORDS_THRESHOLD
 
@@ -34,11 +38,12 @@ def task_records(task_dir: Path, annotation: str, event_time_index: int) -> list
         output = json.loads((sample / "output.json").read_text(encoding="utf-8"))
         metadata = json.loads((sample / annotation).read_text(encoding="utf-8"))
         chunks = output["chunks"]
-        takes_turn = detected_turn(chunks)
+        bounds = speech_bounds(output)
+        takes_turn = detected_turn(chunks, bounds)
         latency = None
         if takes_turn:
             event_time = metadata[0]["timestamp"][event_time_index]
-            latency = max(0.0, chunks[0]["timestamp"][0] - event_time)
+            latency = max(0.0, bounds[0] - event_time)
         records.append({"sample_id": sample.name, "takes_turn": takes_turn, "latency": latency})
     return records
 

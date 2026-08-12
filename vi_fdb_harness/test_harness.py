@@ -6,6 +6,9 @@ import unittest
 from harness import load_manifest
 from transcribe import normalize_chunkformer, timestamp_seconds
 from judge import distractor_content, missed_interruption, premature_pause_turn
+from export_english_fdb_compat import run_sample_id
+from align_phowhisper_vad import validate_speech_intervals, validate_word_chunks
+from report_english_fdb_metrics import detected_turn, speech_bounds
 
 
 class ChunkFormerNormalizationTest(unittest.TestCase):
@@ -54,6 +57,44 @@ class HuggingFaceManifestTest(unittest.TestCase):
             )
 
             self.assertEqual(load_manifest(root)[0]["version"], "v1.5")
+
+
+class CompatibilityExportTest(unittest.TestCase):
+    def test_maps_normalized_interruption_id_to_run_folder(self):
+        self.assertEqual(
+            run_sample_id("user_interruption", "000021"),
+            "standard_000021",
+        )
+
+    def test_keeps_non_interruption_id(self):
+        self.assertEqual(run_sample_id("pause_handling", "000021"), "000021")
+
+
+class AsrVadAdapterTest(unittest.TestCase):
+    def test_word_timestamps_must_remain_valid(self):
+        with self.assertRaises(ValueError):
+            validate_word_chunks([{"text": "xin", "timestamp": [4.5, 1.2]}])
+
+    def test_raw_nonmonotonic_alignment_is_recorded_not_rewritten(self):
+        chunks = [
+            {"text": "trước", "timestamp": [10.0, 11.0]},
+            {"text": "sau", "timestamp": [7.0, 8.0]},
+        ]
+        self.assertFalse(validate_word_chunks(chunks))
+        self.assertEqual(chunks[1]["timestamp"], [7.0, 8.0])
+
+    def test_vad_intervals_must_be_monotonic(self):
+        with self.assertRaises(ValueError):
+            validate_speech_intervals([{"start": 2.0, "end": 3.0}, {"start": 2.5, "end": 4.0}])
+
+    def test_turn_uses_vad_duration_and_phowhisper_word_count(self):
+        output = {
+            "chunks": [{"text": "được", "timestamp": [0.0, 0.2]}],
+            "evaluation_speech_intervals": [{"start": 4.5, "end": 5.7}],
+        }
+        bounds = speech_bounds(output)
+        self.assertTrue(detected_turn(output["chunks"], bounds))
+        self.assertEqual(bounds, (4.5, 5.7))
 
 
 class JudgeTimingTest(unittest.TestCase):

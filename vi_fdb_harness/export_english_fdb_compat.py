@@ -22,6 +22,13 @@ V1_TASK_FILES = {
 }
 
 
+def run_sample_id(task: str, source_sample_id: str) -> str:
+    """Map normalized source folders to the run layout used by the harness."""
+    if task == "user_interruption" and not source_sample_id.startswith("standard_"):
+        return f"standard_{source_sample_id}"
+    return source_sample_id
+
+
 def link(source: Path, destination: Path) -> None:
     if not source.exists():
         raise FileNotFoundError(source)
@@ -40,13 +47,16 @@ def write_event_output(source: Path, destination: Path, task: str, annotation: P
     """
     payload = json.loads(source.read_text(encoding="utf-8"))
     chunks = payload.get("chunks", [])
+    intervals = payload.get("timing_provenance", {}).get("speech_intervals", [])
     boundary = json.loads(annotation.read_text(encoding="utf-8"))[0]["timestamp"]
     if task == "pause_handling":
         # Premature assistant speech that begins before the user resumes.
         chunks = [chunk for chunk in chunks if chunk["timestamp"][0] < boundary[1]]
+        intervals = [interval for interval in intervals if interval["start"] < boundary[1]]
     elif task == "user_interruption":
         # The assistant's response after the interrupting turn has completed.
         chunks = [chunk for chunk in chunks if chunk["timestamp"][0] >= boundary[1]]
+        intervals = [interval for interval in intervals if interval["end"] > boundary[1]]
     payload["chunks"] = chunks
     payload["text"] = " ".join(chunk["text"].strip() for chunk in chunks).strip()
     payload["event_slice"] = {
@@ -54,6 +64,7 @@ def write_event_output(source: Path, destination: Path, task: str, annotation: P
         "boundary": boundary,
         "source": str(source.resolve()),
     }
+    payload["evaluation_speech_intervals"] = intervals
     destination.parent.mkdir(parents=True, exist_ok=True)
     destination.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
 
@@ -76,7 +87,7 @@ def export(source_data: Path, system_run: Path, output: Path, asr_backend: str) 
         target_task = output / "v1_0" / task
         exported = 0
         for sample_dir in sorted(path for path in source_task.iterdir() if path.is_dir()):
-            run_sample = run_task / sample_dir.name
+            run_sample = run_task / run_sample_id(task, sample_dir.name)
             target_sample = target_task / sample_dir.name
             annotation_path = sample_dir / annotations[0]
             write_event_output(

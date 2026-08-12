@@ -8,9 +8,9 @@
 - Trình duyệt kết quả tương tác: <https://huggingface.co/spaces/tuanamz/vi-fdb-v1-explorer>
 
 Bộ dữ liệu trên Hugging Face được công khai, không yêu cầu đăng nhập hay xin
-quyền truy cập. Trường giấy phép trên dataset card hiện là `other`; vui lòng đọc
-kỹ dataset card trước khi phân phối lại hoặc tích hợp audio vào một bản phát hành
-khác.
+quyền truy cập. Bộ dữ liệu tuân theo giấy phép CC BY-NC 4.0 của
+Full-Duplex-Bench gốc. Vi-FDB được công bố độc lập và không phải bộ dữ liệu chính
+thức của VinFast.
 
 ## Benchmark này đo lường điều gì?
 
@@ -34,12 +34,11 @@ Gói dữ liệu gồm hai tập con:
 
 - `data/pilot_160`: đã chạy đầy đủ quy trình đầu-cuối với GPT-Realtime, ASR tiếng
   Việt, chấm tự động và hiệu chỉnh bởi người Việt bản ngữ.
-- `data/expansion_240`: đã vượt qua kiểm tra cấu trúc, timestamp, audio và khoảng
-  lặng cuối, nhưng chưa được đánh giá hệ thống và kiểm tra thủ công ở cùng mức độ.
+- `data/expansion_240`: đã hoàn tất QC cấu trúc/audio, chạy GPT-Realtime,
+  PhoWhisper timestamp mức từ, Silero VAD và các metric FDB gốc phù hợp.
 
-Khi tái lập kết quả đã công bố dưới đây, hãy bắt đầu với `pilot_160`. Có thể dùng
-cả 400 mẫu cho thử nghiệm mới, nhưng kết quả tổng hợp vẫn cần được ghi rõ là kết
-quả trên bản release candidate cho đến khi hoàn tất kiểm tra tập mở rộng.
+Một submission đầy đủ dùng cả 400 mẫu event. 200 clean control là điều kiện đối
+chứng ghép cặp, không phải các mẫu benchmark headline bổ sung.
 
 ## Tải dữ liệu
 
@@ -170,12 +169,16 @@ uv sync --group asr
 uv sync --group judge
 ```
 
-Chuyển lời audio output của trợ lý bằng ChunkFormer:
+Chuyển lời output bằng PhoWhisper với timestamp mức từ, sau đó gắn biên tiếng
+nói quan sát trực tiếp từ audio bằng Silero VAD:
 
 ```bash
 uv run python transcribe.py \
   --root ../outputs/vi_fdb_v1_0/my_model \
-  --backend chunkformer
+  --backend phowhisper
+
+uv run python align_phowhisper_vad.py \
+  --root ../outputs/vi_fdb_v1_0/my_model
 ```
 
 Chạy bộ chấm ẩn thông tin, có xét vai trò hội thoại. Bộ chấm nhận định nghĩa tác
@@ -187,7 +190,7 @@ export OPENAI_API_KEY=...
 
 uv run python judge.py \
   --root ../outputs/vi_fdb_v1_0/my_model \
-  --asr-backend chunkformer
+  --asr-backend phowhisper_vad
 ```
 
 Tạo trang duyệt audio/transcript được đồng bộ theo thời gian:
@@ -195,7 +198,7 @@ Tạo trang duyệt audio/transcript được đồng bộ theo thời gian:
 ```bash
 uv run python report.py \
   --run-root ../outputs/vi_fdb_v1_0/my_model \
-  --asr-backend chunkformer
+  --asr-backend phowhisper_vad
 ```
 
 Cần kiểm tra thủ công các quyết định có độ tin cậy thấp, trường hợp các ASR bất
@@ -203,40 +206,39 @@ Cần kiểm tra thủ công các quyết định có độ tin cậy thấp, tr
 cáo, hãy cung cấp cả điểm tự động lẫn điểm sau hiệu chỉnh thủ công và giữ lại tệp
 ghi các hiệu chỉnh.
 
-## Kết quả benchmark đã hoàn tất của chúng tôi
+## Kết quả tham chiếu GPT-Realtime đã hoàn tất
 
-Chúng tôi đã đánh giá **GPT-Realtime** trên tập pilot 160 mẫu. Audio output của
-trợ lý được chuyển lời bằng **ChunkFormer** và chấm bằng prompt
-**GPT-4.1-mini** có xét vai trò hội thoại. Chúng tôi áp dụng 29 hiệu chỉnh rõ
-ràng từ người Việt bản ngữ; các mẫu còn lại giữ nguyên kết quả chấm tự động. Đây
-là kết quả pilot đã hiệu chỉnh, không phải tuyên bố chính thức trên leaderboard.
+Chúng tôi đã chạy **GPT-Realtime** trên toàn bộ 400 mẫu event và 200 clean
+control. Việc chấm semantic dùng prompt tiếng Việt **GPT-4.1-mini** có xét vai
+trò hội thoại. Pilot có 29 hiệu chỉnh từ người Việt bản ngữ; expansion hiện chỉ
+được chấm tự động và cần cùng quy trình kiểm tra thủ công trước khi công bố như
+một kết quả leaderboard.
 
-| Tác vụ trong pilot | Đạt | Tổng | Tỷ lệ đạt |
+| Tác vụ | Pilot (20) | Expansion (30) | Toàn bộ (50) |
 |---|---:|---:|---:|
-| Backchannel | 20 | 20 | 100% |
-| Xử lý khoảng dừng | 8 | 20 | 40% |
-| Chuyển lượt mượt mà | 17 | 20 | 85% |
-| Người dùng ngắt lời — bản chuẩn | 8 | 20 | 40% |
-| Tiếng nói nền | 6 | 20 | 30% |
-| Người dùng nói với người khác | 6 | 20 | 30% |
-| Backchannel của người dùng | 20 | 20 | 100% |
-| Người dùng ngắt lời — biến thể ghép cặp/clean control | 16 | 20 | 80% |
-| **Tổng** | **101** | **160** | **63,1%** |
+| Backchannel | 100% | 100% | 100% |
+| Xử lý khoảng dừng | 40% | 36,7% | 38% |
+| Chuyển lượt mượt mà | 85% | 73,3% | 78% |
+| Người dùng ngắt lời — bản chuẩn | 40% | 80% | 64% |
+| Tiếng nói nền | 30% | 10% | 18% |
+| Người dùng nói với người khác | 30% | 26,7% | 28% |
+| Backchannel của người dùng | 100% | 96,7% | 98% |
+| Người dùng ngắt lời — biến thể ghép cặp | 80% | 96,7% | 90% |
+| **Tổng** | **63,1% (101/160)** | **65,0% (156/240)** | **64,2% (257/400)** |
 
 Các metric về timing/chuyển lượt, không phụ thuộc ngôn ngữ và được xuất theo cấu
 trúc tương thích với English FDB, gồm:
 
-| Metric | Kết quả pilot của GPT-Realtime |
+| Metric FDB gốc | Kết quả GPT-Realtime (50 mẫu) |
 |---|---:|
-| Tỷ lệ giành lượt trong khoảng dừng (càng thấp càng tốt) | 15% (3/20) |
-| Tỷ lệ chờ đúng trong khoảng dừng | 85% (17/20) |
-| Tỷ lệ giành lượt đúng sau khi người dùng nói xong | 90% (18/20) |
-| Độ trễ chuyển lượt mượt mà, tính trên các mẫu có phản hồi | 0,773 giây |
-| Tỷ lệ phản hồi sau khi bị ngắt lời | 45% (9/20) |
-| Độ trễ phản hồi sau khi bị ngắt lời, tính trên các mẫu có phản hồi | 1,107 giây |
-| Mức độ liên quan sau ngắt lời bằng tiếng Việt | 2,05 / 5 |
+| Tỷ lệ giành lượt trong khoảng dừng (càng thấp càng tốt) | 48% (24/50) |
+| Tỷ lệ chờ đúng trong khoảng dừng | 52% (26/50) |
+| Tỷ lệ giành lượt đúng sau khi người dùng nói xong | 98% (49/50) |
+| Độ trễ chuyển lượt mượt mà, tính trên các mẫu có phản hồi | 1,000 giây |
+| Tỷ lệ phản hồi sau khi bị ngắt lời | 76% (38/50) |
+| Độ trễ phản hồi sau khi bị ngắt lời, tính trên các mẫu có phản hồi | 0,662 giây |
 
-Điểm ngữ nghĩa 63,1% và các metric timing trả lời những câu hỏi khác nhau. Ví
+Điểm ngữ nghĩa và các metric timing trả lời những câu hỏi khác nhau. Ví
 dụ, hệ thống có thể chờ đúng qua một khoảng dừng nhưng sau đó bỏ sót phần còn lại
 của yêu cầu tiếng Việt. Metric timing ghi nhận việc chờ là đúng, trong khi bộ
 chấm ngữ nghĩa đánh giá đầy đủ hành vi này là không đạt.
@@ -261,15 +263,15 @@ Tối thiểu cần ghi lại:
 - chính sách lấy mẫu kiểm tra thủ công và toàn bộ hiệu chỉnh;
 - số mẫu đạt theo từng tác vụ, tỷ lệ đạt tổng thể và các metric timing phù hợp.
 
-Không so sánh trực tiếp kết quả trên 400 mẫu của release candidate với điểm pilot
-160 mẫu của chúng tôi nếu không báo cáo thêm kết quả trên chính lát cắt
-`pilot_160`.
+Khi so sánh submission, hãy báo cáo cả kết quả toàn bộ và kết quả trên cùng một
+split có tên. Pilot đã được hiệu chỉnh thủ công, còn expansion hiện chưa có bước đó.
 
 ## Artifact tham chiếu trong repository bộ dữ liệu
 
 Repository Hugging Face bao gồm:
 
 - `evaluation/upstream_metrics.json`: metric timing tương thích với English FDB.
+- `evaluation/semantic_parity.json`: số liệu semantic của pilot, expansion và toàn bộ.
 - `evaluation/interruption_relevance_summary.json`: kết quả đánh giá mức độ liên
   quan sau ngắt lời đã bản địa hóa cho tiếng Việt.
 - `data/pilot_160/vibe_check.html`: trang duyệt tập pilot.
