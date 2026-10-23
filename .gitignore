@@ -50,3 +50,26 @@ Thumbs.db
 # V2 Architecture
 v2/node_modules/
 v2/outputs/
+
+# Local API credentials / tokens — never commit
+external/VieNeu-TTS/open router key.txt
+docs/open router key.txt
+**/open router key.txt
+**/*key.txt
+**/*token*.txt
+**/.hf_token
+
+# Local run outputs — artifacts, not source
+outputs/
+
+# External dependencies cloned locally — install separately per README
+external/
+
+# Virtual environments / caches not already covered
+.venv/
+
+# Node modules & build artifacts anywhere
+**/node_modules/
+**/dist/
+**/.vite/
+package-lock.json

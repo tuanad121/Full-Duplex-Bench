@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Vietnamese Full-Duplex Training Data Pipeline</title>
+  <style>
+    * { box-sizing: border-box; }
+    body { margin: 0; width: 1800px; height: 1100px; overflow: hidden; background: #f6f8fc; color: #172033; font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+    main { padding: 54px 70px; }
+    h1 { margin: 0; font-size: 42px; letter-spacing: -1.2px; }
+    .subtitle { margin: 8px 0 34px; color: #64748b; font-size: 21px; }
+    .pipeline { display: grid; grid-template-columns: repeat(5, 1fr); gap: 46px; align-items: stretch; }
+    .stage { position: relative; display: flex; flex-direction: column; gap: 15px; }
+    .stage:not(:last-child)::after { content: "→"; position: absolute; right: -38px; top: 255px; color: #8ca0bd; font-size: 42px; font-weight: 800; }
+    .stage-title { min-height: 64px; display: flex; align-items: center; gap: 10px; color: #475569; font-weight: 800; font-size: 18px; text-transform: uppercase; letter-spacing: .08em; }
+    .num { display: grid; place-items: center; width: 35px; height: 35px; border-radius: 50%; background: #172033; color: white; font-size: 16px; }
+    .box { min-height: 139px; border: 2px solid #d8e1ee; border-radius: 18px; padding: 20px; background: white; box-shadow: 0 8px 24px rgba(35, 55, 85, .07); }
+    .box h2 { margin: 0 0 9px; font-size: 22px; line-height: 1.15; }
+    .box p { margin: 0; color: #64748b; font-size: 16px; line-height: 1.42; }
+    .blue { border-color: #9bbbf3; background: #f4f8ff; }
+    .violet { border-color: #bda9ed; background: #faf8ff; }
+    .amber { border-color: #ebc178; background: #fffbf2; }
+    .green { border-color: #95d3b1; background: #f3fcf7; }
+    .red { border-color: #eba29e; background: #fff7f6; }
+    .gate { position: relative; }
+    .gate::before { content: "QUALITY GATE"; display: inline-block; margin-bottom: 10px; padding: 4px 9px; border-radius: 999px; background: #fee2e2; color: #991b1b; font-size: 12px; font-weight: 900; letter-spacing: .08em; }
+    .optional::before { content: "OPTIONAL VIBE-CHECK"; display: inline-block; margin-bottom: 10px; padding: 4px 9px; border-radius: 999px; background: #dcfce7; color: #166534; font-size: 12px; font-weight: 900; letter-spacing: .08em; }
+    .reject { margin-top: -3px; padding: 10px 13px; border: 1px dashed #e7a6a2; border-radius: 12px; color: #9f3430; background: #fff8f7; font-size: 14px; font-weight: 700; text-align: center; }
+    .artifacts { margin-top: 31px; display: grid; grid-template-columns: 1.4fr 1fr 1fr; gap: 18px; }
+    .artifact { display: flex; gap: 14px; align-items: center; border: 1px solid #d7e0ec; border-radius: 14px; padding: 15px 18px; background: #fff; }
+    .icon { font-size: 27px; }
+    .artifact b { display: block; font-size: 16px; }
+    .artifact span { color: #64748b; font-size: 14px; }
+    footer { margin-top: 27px; border-top: 1px solid #d7e0ec; padding-top: 19px; display: flex; justify-content: space-between; color: #526175; font-size: 16px; }
+    footer strong { color: #172033; }
+  </style>
+</head>
+<body>
+<main>
+  <h1>LLM-Based Dialogue Creation for Vietnamese Full-Duplex Training</h1>
+  <p class="subtitle">Generate long conversations, validate semantics before synthesis, then extract causal audio windows.</p>
+
+  <section class="pipeline">
+    <div class="stage">
+      <div class="stage-title"><span class="num">1</span> Design</div>
+      <div class="box blue"><h2>Behavior specification</h2><p>Ordinary turns, interruptions, backchannels, pauses, and ambiguous events</p></div>
+      <div class="box blue"><h2>LLM generation</h2><p>Long, coherent Vietnamese conversations with event roles and target actions</p></div>
+    </div>
+
+    <div class="stage">
+      <div class="stage-title"><span class="num">2</span> Text QC</div>
+      <div class="box red gate"><h2>Deterministic checks</h2><p>Schema, labels, completeness, uniqueness, and train/evaluation leakage</p></div>
+      <div class="box violet gate"><h2>Independent LLM review</h2><p>Naturalness, continuity, event role, and correct agent behavior</p></div>
+      <div class="reject">Reject or regenerate weak scripts ↩</div>
+    </div>
+
+    <div class="stage">
+      <div class="stage-title"><span class="num">3</span> Audio</div>
+      <div class="box amber"><h2>VieNeu-TTS</h2><p>Synthesize user, agent, and event utterances with consistent speaker identities</p></div>
+      <div class="box amber"><h2>Timeline renderer</h2><p>Place turns, create overlap, and apply stop, continue, listen, or reply targets</p></div>
+    </div>
+
+    <div class="stage">
+      <div class="stage-title"><span class="num">4</span> Audio QC</div>
+      <div class="box red gate"><h2>Automated validation</h2><p>ASR, VAD, speaker similarity, clipping, timestamps, and reaction latency</p></div>
+      <div class="box green optional"><h2>Human listening review</h2><p>Small, unofficial HTML vibe-check for pilots, spot checks, and debugging</p></div>
+      <div class="reject">Automated failures are resynthesized ↩</div>
+    </div>
+
+    <div class="stage">
+      <div class="stage-title"><span class="num">5</span> Training</div>
+      <div class="box green"><h2>Validated conversations</h2><p>Preserve 1–3 minute synchronized sources as canonical data</p></div>
+      <div class="box green"><h2>Causal windows</h2><p>Extract 20–28 second examples with user audio, agent history, and agent targets</p></div>
+    </div>
+  </section>
+
+  <section class="artifacts">
+    <div class="artifact"><span class="icon">🎧</span><div><b>Synchronized audio</b><span>user.wav · agent.wav · mixture.wav</span></div></div>
+    <div class="artifact"><span class="icon">⏱️</span><div><b>Timeline metadata</b><span>event times · expected actions</span></div></div>
+    <div class="artifact"><span class="icon">🧠</span><div><b>Training targets</b><span>start · stop · continue · listen</span></div></div>
+  </section>
+
+  <footer><span><strong>Principle:</strong> catch semantic errors before expensive TTS; preserve clean stems before mixing.</span><span>Vietnamese full-duplex speech-to-speech data</span></footer>
+</main>
+</body>
+</html>

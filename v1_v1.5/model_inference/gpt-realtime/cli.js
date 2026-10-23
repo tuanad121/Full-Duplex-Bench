@@ -1,235 +1,242 @@
 #!/usr/bin/env node
 
-// cli.js: Stream a WAV file to OpenAI Realtime API and record the combined conversation.
-
 import fs from "fs";
-import fetch from "node-fetch";
 import minimist from "minimist";
-import pkg from "wrtc";
-const { RTCPeerConnection, nonstandard } = pkg;
-import "dotenv/config";
+import WebSocket from "ws";
 import wav from "wav";
+import "dotenv/config";
 
-(async () => {
-  ///////////////////////////////////////
-  // IMPORTANT: Set your OpenAI API key
-  const apiKey = "YOUR_OPENAI_API_KEY"; // Replace with your actual API key
-  ///////////////////////////////////////
+const argv = minimist(process.argv.slice(2), {
+  string: ["input", "output", "model", "language"],
+  alias: { i: "input", o: "output", m: "model" },
+});
+const inputPath = argv.input;
+const outputPath = argv.output || "combined.wav";
+const model = argv.model || process.env.OPENAI_REALTIME_MODEL || "gpt-realtime";
+const language = argv.language || "vi";
+const apiKey = process.env.OPENAI_API_KEY || process.env.OPENAI_KEY;
+const sampleRate = 24000;
+const timeoutMs = Number(process.env.REALTIME_RESPONSE_TIMEOUT_MS || 45000);
 
-  // Parse command-line arguments
-  const argv = minimist(process.argv.slice(2), {
-    string: ["input", "output", "model"],
-    alias: { i: "input", o: "output", m: "model" },
+if (!inputPath || !apiKey) {
+  console.error("Usage: cli.js --input input.wav [--output combined.wav]");
+  console.error("OPENAI_API_KEY is required (OPENAI_KEY is also accepted).");
+  process.exit(2);
+}
+
+function readWav(path) {
+  return new Promise((resolve, reject) => {
+    const reader = new wav.Reader();
+    const chunks = [];
+    let format;
+    reader.on("format", (value) => { format = value; });
+    reader.on("data", (chunk) => chunks.push(chunk));
+    reader.on("error", reject);
+    reader.on("end", () => resolve({ format, data: Buffer.concat(chunks) }));
+    fs.createReadStream(path).on("error", reject).pipe(reader);
   });
+}
 
-  // Normalize input path
-  const inputRaw = argv.input;
-  const inputPath = Array.isArray(inputRaw) ? inputRaw[inputRaw.length - 1] : inputRaw;
+function monoPcm16(format, data) {
+  if (!format || ![16, 32].includes(format.bitDepth)) {
+    throw new Error(`Unsupported WAV bit depth: ${format?.bitDepth}`);
+  }
+  const bytes = format.bitDepth / 8;
+  const frames = Math.floor(data.length / (bytes * format.channels));
+  const source = new Int16Array(frames);
+  for (let frame = 0; frame < frames; frame += 1) {
+    let total = 0;
+    for (let channel = 0; channel < format.channels; channel += 1) {
+      const offset = (frame * format.channels + channel) * bytes;
+      total += format.bitDepth === 16
+        ? data.readInt16LE(offset)
+        : Math.round(Math.max(-1, Math.min(1, data.readFloatLE(offset))) * 32767);
+    }
+    source[frame] = Math.round(total / format.channels);
+  }
+  if (format.sampleRate === sampleRate) return source;
+  const ratio = sampleRate / format.sampleRate;
+  const target = new Int16Array(Math.floor(source.length * ratio));
+  for (let i = 0; i < target.length; i += 1) {
+    const position = i / ratio;
+    const left = Math.floor(position);
+    const right = Math.min(left + 1, source.length - 1);
+    const fraction = position - left;
+    target[i] = Math.round(source[left] * (1 - fraction) + source[right] * fraction);
+  }
+  return target;
+}
 
-  // Normalize output path
-  const outputRaw = argv.output;
-  const outputPath = Array.isArray(outputRaw) ? outputRaw[outputRaw.length - 1] : outputRaw || "combined.wav";
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
 
-  const model = argv.model || "gpt-4o-realtime-preview-2024-12-17";
+function writePcmWav(path, pcm) {
+  return new Promise((resolve, reject) => {
+    const writer = new wav.Writer({ sampleRate, channels: 1, bitDepth: 16 });
+    const stream = fs.createWriteStream(path);
+    stream.on("finish", resolve);
+    stream.on("error", reject);
+    writer.pipe(stream);
+    writer.end(pcm);
+  });
+}
 
-  if (!inputPath) {
-    console.error(
-      "Usage: cli.js --input <path/to.wav> [--output <out.wav>] [--model <model-name>]"
+const { format, data } = await readWav(inputPath);
+const input = monoPcm16(format, data);
+const outputChunks = [];
+const timelineEvents = [];
+const responsePlayoutEnds = new Map();
+const responseCutoffs = new Map();
+let streamStartedAtMs = null;
+let sessionReady = false;
+let activeResponses = 0;
+let completedResponses = 0;
+let lastEventAt = Date.now();
+let fatalError;
+
+const socket = new WebSocket(`wss://api.openai.com/v1/realtime?model=${encodeURIComponent(model)}`, {
+  headers: { Authorization: `Bearer ${apiKey}` },
+});
+
+socket.on("open", () => {
+  socket.send(JSON.stringify({
+    type: "session.update",
+    session: {
+      type: "realtime",
+      output_modalities: ["audio"],
+      instructions: `Luôn trả lời bằng tiếng Việt. Ngôn ngữ đầu vào là ${language}.`,
+      audio: {
+        input: {
+          format: { type: "audio/pcm", rate: sampleRate },
+          turn_detection: {
+            type: "server_vad",
+            threshold: 0.5,
+            prefix_padding_ms: 300,
+            silence_duration_ms: 500,
+            create_response: true,
+            interrupt_response: true,
+          },
+        },
+        output: {
+          format: { type: "audio/pcm", rate: sampleRate },
+          voice: process.env.OPENAI_REALTIME_VOICE || "alloy",
+        },
+      },
+    },
+  }));
+});
+
+socket.on("message", (raw) => {
+  lastEventAt = Date.now();
+  const event = JSON.parse(raw.toString());
+  const timelineTime = streamStartedAtMs === null
+    ? null
+    : Math.max(0, (performance.now() - streamStartedAtMs) / 1000);
+  if (timelineTime !== null && [
+    "input_audio_buffer.speech_started",
+    "input_audio_buffer.speech_stopped",
+    "response.created",
+    "response.done",
+  ].includes(event.type)) {
+    timelineEvents.push({
+      type: event.type,
+      time: Number(timelineTime.toFixed(6)),
+      response_id: event.response?.id || event.response_id || null,
+      status: event.response?.status || null,
+    });
+  }
+  if (event.type === "session.updated") sessionReady = true;
+  if (event.type === "response.created") activeResponses += 1;
+  if (event.type === "response.done") {
+    activeResponses = Math.max(0, activeResponses - 1);
+    completedResponses += 1;
+    if (event.response?.status === "cancelled" && timelineTime !== null) {
+      const responseId = event.response?.id || event.response_id;
+      const cutoffSample = Math.round(timelineTime * sampleRate);
+      if (responseId) {
+        responseCutoffs.set(responseId, cutoffSample);
+        responsePlayoutEnds.set(responseId, cutoffSample);
+      }
+    }
+  }
+  if (event.type === "error") {
+    fatalError = new Error(JSON.stringify(event.error));
+  }
+  if (event.type === "response.output_audio.delta" || event.type === "response.audio.delta") {
+    const chunk = Buffer.from(event.delta, "base64");
+    const arrivalSample = Math.max(
+      0,
+      Math.round((performance.now() - streamStartedAtMs) * sampleRate / 1000),
     );
-    process.exit(1);
+    const responseId = event.response_id || "unknown";
+    const responseEnd = responsePlayoutEnds.get(responseId) || 0;
+    const startSample = Math.max(arrivalSample, responseEnd);
+    outputChunks.push({ responseId, startSample, chunk });
+    responsePlayoutEnds.set(responseId, startSample + chunk.length / 2);
   }
+});
+socket.on("error", (error) => { fatalError = error; });
 
-  // Read and decode WAV
-  const reader = new wav.Reader();
-  const inStream = fs.createReadStream(inputPath);
-  let format;
-  const pcmChunks = [];
+const connectDeadline = Date.now() + 15000;
+while (!sessionReady && !fatalError && Date.now() < connectDeadline) await sleep(25);
+if (fatalError) throw fatalError;
+if (!sessionReady) throw new Error("Timed out waiting for session.updated");
 
-  reader.on("format", (fmt) => {
-    format = fmt;
-  });
-  reader.on("data", (data) => pcmChunks.push(data));
+const frameSamples = Math.floor(sampleRate / 10);
+streamStartedAtMs = performance.now();
+lastEventAt = Date.now();
+for (let offset = 0; offset < input.length; offset += frameSamples) {
+  // Pace against the absolute source timeline. This avoids accumulating
+  // setTimeout drift over long clips.
+  const targetTimeMs = streamStartedAtMs + (offset / sampleRate) * 1000;
+  const waitMs = targetTimeMs - performance.now();
+  if (waitMs > 0) await sleep(waitMs);
+  const frame = input.subarray(offset, Math.min(offset + frameSamples, input.length));
+  socket.send(JSON.stringify({
+    type: "input_audio_buffer.append",
+    audio: Buffer.from(frame.buffer, frame.byteOffset, frame.byteLength).toString("base64"),
+  }));
+  if (fatalError) throw fatalError;
+}
+const inputEndTimeMs = streamStartedAtMs + (input.length / sampleRate) * 1000;
+const finalPaceWaitMs = inputEndTimeMs - performance.now();
+if (finalPaceWaitMs > 0) await sleep(finalPaceWaitMs);
 
-  await new Promise((resolve) => {
-    reader.on("end", resolve);
-    inStream.pipe(reader);
-  });
+const responseDeadline = Date.now() + timeoutMs;
+while (Date.now() < responseDeadline) {
+  if (fatalError) throw fatalError;
+  if (completedResponses > 0 && activeResponses === 0 && Date.now() - lastEventAt >= 1500) break;
+  await sleep(50);
+}
+socket.close();
 
-  if (!format) {
-    console.error("Failed to parse WAV format from input file.");
-    process.exit(1);
-  }
-
-  // Flatten samples to Int16Array (downmix to mono)
-  let samples;
-  const { sampleRate: origSampleRate, bitDepth, channels } = format;
-  const bytesPerSample = bitDepth / 8;
-  const totalFrames = Buffer.concat(pcmChunks).length / (bytesPerSample * channels);
-  samples = new Int16Array(totalFrames);
-  const buffer = Buffer.concat(pcmChunks);
-  for (let i = 0; i < totalFrames; i++) {
-    let acc = 0;
-    for (let c = 0; c < channels; c++) {
-      const offset = (i * channels + c) * bytesPerSample;
-      const sample = bitDepth === 32
-        ? Math.round(Math.max(-1, Math.min(1, buffer.readFloatLE(offset))) * 32767)
-        : buffer.readInt16LE(offset);
-      acc += sample;
-    }
-    samples[i] = Math.round(acc / channels);
-  }
-
-  // Resample to 48000 Hz
-  const targetRate = 48000;
-  let resampled;
-  if (origSampleRate !== targetRate) {
-    const ratio = targetRate / origSampleRate;
-    const newLen = Math.floor(samples.length * ratio);
-    resampled = new Int16Array(newLen);
-    for (let i = 0; i < newLen; i++) {
-      const idx = i / ratio;
-      const i0 = Math.floor(idx);
-      const i1 = Math.min(i0 + 1, samples.length - 1);
-      const frac = idx - i0;
-      resampled[i] = Math.round(samples[i0] * (1 - frac) + samples[i1] * frac);
-    }
-  } else {
-    resampled = samples;
-  }
-
-  // Build PCM buffer
-  const inputPcm = Buffer.alloc(resampled.length * 2);
-  for (let i = 0; i < resampled.length; i++) {
-    inputPcm.writeInt16LE(resampled[i], i * 2);
-  }
-
-  const sampleRate = targetRate;
-  const frameSize = sampleRate / 100; // 480 samples
-  const frameBytes = frameSize * 2;
-
-  // Session token
-  if (!apiKey) {
-    console.error("Missing OPENAI_API_KEY in .env");
-    process.exit(1);
-  }
-  const sess = await fetch("https://api.openai.com/v1/realtime/sessions", {
-    method: "POST",
-    headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
-    body: JSON.stringify(
-    { 
-      model: model, 
-      voice: "alloy" //"verse"
-    }
-    ),
-  });
-  const tokData = await sess.json();
-  if (!tokData.client_secret?.value) {
-    console.error("Failed to obtain session token:", tokData);
-    process.exit(1);
-  }
-  const token = tokData.client_secret.value;
-
-  // WebRTC setup
-  const pc = new RTCPeerConnection();
-  const source = new nonstandard.RTCAudioSource();
-  const track = source.createTrack();
-  pc.addTrack(track);
-  const gptBuffers = [];  // { samples: Int16Array, time: bigint }
-  let done = false;
-
-  pc.ontrack = ({ track: incomingTrack }) => {
-    const sink = new nonstandard.RTCAudioSink(incomingTrack);
-    sink.ondata = ({ samples }) => {
-      gptBuffers.push({ samples: new Int16Array(samples), time: process.hrtime.bigint() });
-    };
-  };
-
-  const dc = pc.createDataChannel("oai_events");
-  dc.onmessage = (e) => {
-    const m = JSON.parse(e.data);
-    if (m.type === "response.done") done = true;
-  };
-
-  // SDP exchange
-  const offer = await pc.createOffer();
-  await pc.setLocalDescription(offer);
-  const sigRes = await fetch(`https://api.openai.com/v1/realtime?model=${model}`, {
-    method: "POST",
-    headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/sdp" },
-    body: offer.sdp,
-  });
-  const ans = await sigRes.text();
-  await pc.setRemoteDescription({ type: "answer", sdp: ans });
-
-  // Record start time and Stream input
-  const startTime = process.hrtime.bigint();
-  for (let off = 0; off < inputPcm.length; off += frameBytes) {
-    let chunk = inputPcm.slice(off, off + frameBytes);
-    if (chunk.length < frameBytes) {
-      const pad = Buffer.alloc(frameBytes - chunk.length);
-      chunk = Buffer.concat([chunk, pad]);
-    }
-    const temp = new Int16Array(chunk.buffer, chunk.byteOffset, frameSize);
-    const frame = Int16Array.from(temp);
-    source.onData({ samples: frame, sampleRate, bitsPerSample: 16, channelCount: 1 });
-    await new Promise((r) => setTimeout(r, 10));
-  }
-
-  // Signal end of input
-  track.stop();
-
-  // Wait
-  while (!done) await new Promise((r) => setTimeout(r, 50));
-
-  // First, save GPT response as a separate WAV file
-  console.log("Saving GPT response...");
-  
-  // Concatenate all GPT audio chunks
-  let totalGptSamples = 0;
-  gptBuffers.forEach(({ samples }) => {
-    totalGptSamples += samples.length;
-  });
-  
-  const gptAudio = new Int16Array(totalGptSamples);
-  let gptOffset = 0;
-  gptBuffers.forEach(({ samples }) => {
-    gptAudio.set(samples, gptOffset);
-    gptOffset += samples.length;
-  });
-  
-  // Calculate when GPT response should start (based on first buffer timestamp)
-  let gptStartOffset = 0;
-  if (gptBuffers.length > 0) {
-    const firstGptTime = gptBuffers[0].time;
-    const delta = Number(firstGptTime - startTime) / 1e6; // ms
-    gptStartOffset = Math.round((delta * sampleRate) / 1000);
-  }
-
-  // Now combine the two audio files
-  const inputSamples = new Int16Array(inputPcm.buffer);
-
-  // Truncate GPT response to input length before saving
-  let gptAudioTruncated = gptAudio;
-  if (gptAudio.length > inputSamples.length) {
-    gptAudioTruncated = gptAudio.slice(0, inputSamples.length);
-    console.log("Note: GPT response file was truncated to match input duration");
-  }
-
-  // Write GPT response to separate file
-  const gptPath = outputPath.replace('.wav', '_gpt_response.wav');
-  const gptWriter = new wav.Writer({ sampleRate, channels: 1, bitDepth: 16 });
-  const gptStream = fs.createWriteStream(gptPath);
-  gptWriter.pipe(gptStream);
-  gptWriter.write(Buffer.from(gptAudioTruncated.buffer, gptAudioTruncated.byteOffset, gptAudioTruncated.byteLength));
-  gptWriter.end();
-  
-  // Wait for GPT file to finish writing
-  await new Promise((resolve) => {
-    gptStream.on('finish', resolve);
-  });
-  console.log(`GPT response saved to: ${gptPath}`);
-  
-  dc.close();
-  pc.close();
-  process.exit(0);
-})();
+// Silence is a valid full-duplex action (for example, continued listening).
+// Preserve the input timeline so downstream scorers still receive a valid WAV.
+let outputEndSample = input.length;
+for (const { responseId, startSample, chunk } of outputChunks) {
+  const cutoff = responseCutoffs.get(responseId) ?? Infinity;
+  const effectiveEnd = Math.min(startSample + chunk.length / 2, cutoff);
+  outputEndSample = Math.max(outputEndSample, effectiveEnd);
+}
+const output = Buffer.alloc(outputEndSample * 2);
+for (const { responseId, startSample, chunk } of outputChunks) {
+  const cutoff = responseCutoffs.get(responseId) ?? Infinity;
+  const effectiveSamples = Math.max(
+    0,
+    Math.min(chunk.length / 2, cutoff - startSample, outputEndSample - startSample),
+  );
+  if (effectiveSamples > 0) chunk.copy(output, startSample * 2, 0, effectiveSamples * 2);
+}
+const gptPath = outputPath.replace(/\.wav$/i, "_gpt_response.wav");
+const timingPath = outputPath.replace(/\.wav$/i, "_timing.json");
+await writePcmWav(gptPath, output);
+fs.writeFileSync(timingPath, JSON.stringify({
+  schema_version: 1,
+  clock: "monotonic_from_first_input_frame",
+  sample_rate: sampleRate,
+  input_duration: input.length / sampleRate,
+  output_timeline_duration: outputEndSample / sampleRate,
+  events: timelineEvents,
+}, null, 2));
+console.log(`responses=${completedResponses} output=${gptPath} duration=${(outputEndSample / sampleRate).toFixed(3)}s`);

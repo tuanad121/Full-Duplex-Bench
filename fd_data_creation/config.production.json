@@ -1,0 +1,45 @@
+{
+  "seed": 20260904,
+  "rounds_min": 6,
+  "rounds_max": 10,
+  "strategy_weights": {
+    "single_author": 0.75,
+    "role_play": 0.25
+  },
+  "single_author_models": [
+    "anthropic/claude-opus-4.6",
+    "openai/gpt-4o",
+    "google/gemini-2.5-pro"
+  ],
+  "role_play": {
+    "director_model": "anthropic/claude-sonnet-4.6",
+    "user_model": "google/gemini-2.5-pro",
+    "agent_model": "openai/gpt-4o",
+    "annotator_model": "anthropic/claude-sonnet-4.6"
+  },
+  "reviewer_models": [
+    "anthropic/claude-sonnet-4.6",
+    "openai/gpt-4o",
+    "google/gemini-2.5-pro"
+  ],
+  "openrouter_base_url": "https://openrouter.ai/api/v1",
+  "generation_temperature": 0.8,
+  "synthesis_temperature": 0.5,
+  "review_temperature": 0.0,
+  "max_retries": 2,
+  "voices": {
+    "user": "src/vieneu/assets/samples/Ly (nữ miền Bắc).wav",
+    "agent": "src/vieneu/assets/samples/Vĩnh (nam miền Nam).wav"
+  },
+  "voice_gender": {
+    "user": "nữ",
+    "agent": "nam"
+  },
+  "sample_rate": 48000,
+  "turn_gap_seconds": 0.42,
+  "reaction_seconds": 0.32,
+  "post_event_gap_seconds": 0.48,
+  "tail_seconds": 0.5,
+  "window_seconds": 24.0,
+  "window_event_position_seconds": 14.0
+}

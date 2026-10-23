@@ -21,7 +21,9 @@ process_folder() {
   INPUT_WAV="$FOLDER/input.wav"
   OUTPUT_WAV="$FOLDER/combined.wav"
   GPT_WAV="$FOLDER/combined_gpt_response.wav"
+  GPT_TIMING="$FOLDER/combined_timing.json"
   FINAL_WAV="$FOLDER/output.wav"
+  FINAL_TIMING="$FOLDER/output_timing.json"
 
   if [[ ! -f "$INPUT_WAV" ]]; then
     echo "[$FOLDER] input wav not found" >> "$ERROR_LOG"
@@ -29,7 +31,7 @@ process_folder() {
   fi
 
   # Run the CLI
-  if ! npm run cli -- --input "$INPUT_WAV" --output "$OUTPUT_WAV" > "$FOLDER/cli.log" 2>&1; then
+  if ! node cli.js --input "$INPUT_WAV" --output "$OUTPUT_WAV" > "$FOLDER/cli.log" 2>&1; then
     echo "[$FOLDER] CLI failed (see $FOLDER/cli.log)" >> "$ERROR_LOG"
     return
   fi
@@ -43,6 +45,10 @@ process_folder() {
   if ! mv -f "$GPT_WAV" "$FINAL_WAV"; then
     echo "[$FOLDER] Failed to move combined_gpt_response.wav to output.wav" >> "$ERROR_LOG"
     return
+  fi
+
+  if [[ -f "$GPT_TIMING" ]]; then
+    mv -f "$GPT_TIMING" "$FINAL_TIMING"
   fi
 }
 

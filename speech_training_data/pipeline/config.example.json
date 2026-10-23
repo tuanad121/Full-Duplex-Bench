@@ -1,0 +1,23 @@
+{
+  "seed": 20260831,
+  "conversation_count": 8,
+  "rounds_min": 6,
+  "rounds_max": 10,
+  "generator_models": [
+    "openai/gpt-4.1-mini",
+    "google/gemini-2.5-flash"
+  ],
+  "reviewer_model": "anthropic/claude-sonnet-4.6",
+  "openrouter_base_url": "https://openrouter.ai/api/v1",
+  "voices": {
+    "user": "src/vieneu/assets/samples/Ly (nữ miền Bắc).wav",
+    "agent": "src/vieneu/assets/samples/Vĩnh (nam miền Nam).wav"
+  },
+  "sample_rate": 48000,
+  "turn_gap_seconds": 0.42,
+  "reaction_seconds": 0.32,
+  "post_event_gap_seconds": 0.48,
+  "tail_seconds": 0.5,
+  "window_seconds": 24.0,
+  "window_event_position_seconds": 14.0
+}
